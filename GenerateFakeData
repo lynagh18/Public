@@ -1,0 +1,172 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed May 24 11:35:40 2023
+
+@author: john.lynagh
+
+Purpose: Create fake data as an assessment for a job applicant or for demo purposes
+
+"""
+#import packages
+import random
+import pandas as pd
+from faker import Faker
+import uuid
+
+# show all columns in console
+pd.set_option('display.max_columns', None)
+
+# Initialize a Faker object
+fake = Faker()
+
+# Define the function to generate HR data
+def generate_hr_data(num_entries):
+    data = []
+    for _ in range(num_entries):
+        employee_id = str(uuid.uuid4())
+        title = fake.prefix()
+        name = fake.first_name() + " " + fake.last_name()
+        suffix = fake.suffix()
+        email = name.replace(" ",".") + "@company.org"
+        ssn = fake.ssn()
+        hire_date = fake.date_between(start_date='-5y', end_date='today')
+        salary = round(random.uniform(40000, 120000), 0)
+        job_role = random.choice(['Analyst', 'Manager', 'Director', 
+                                  'Vice President', 'Architect', 'Engineer',
+                                  'Developer'])
+        department = random.choice(['HR', 'Finance', 'IT', 'Sales', 
+                                    'Marketing', 'Operations', 'PMO'])
+        data.append([employee_id, title, name, suffix, email, ssn, hire_date, 
+                     salary, job_role, department])
+    return data
+
+# Generate fake HR data records
+hr_data = generate_hr_data(120)
+
+# Create a DataFrame
+df = pd.DataFrame(hr_data, columns=['EmployeeID', 'Title', 'Name', 'Suffix', 
+                                    'Email', 'SSN', 'Hire Date', 'Salary', 
+                                    'Job_Role','Department'])
+
+# Randomly select a number of rows to mask the SSN
+mask_indices = df.sample(116).index
+for idx in mask_indices:
+    df.loc[idx, 'SSN'] = '***-**-' + df.loc[idx, 'SSN'][7:]
+
+
+# select random rows in the df and append them to the df to create duplicates
+for _ in range(3):
+    # Generate a random row
+    random_row = df.sample()
+    # Append the random row to the DataFrame
+    df = pd.concat([df, random_row]).reset_index(drop=True)
+
+
+# Make a few values NaN at random
+# List of columns to consider for NaN insertion
+columns_to_consider = [col for col in df.columns if col not in ['EmployeeID', 'Name']]
+
+for _ in range(10):  # number of NaN values to introduce
+    idx = [
+        random.randint(0, df.shape[0] - 1),  # row
+        random.choice(columns_to_consider)  # column
+    ]
+    df.at[idx[0], idx[1]] = pd.NA
+
+
+# randomly replace specific job roles w/ another variation
+for _ in range(3):  # number of replacements
+    idx = df[df['Job_Role'] == 'Vice President'].sample(1).index
+    df.at[idx[0], 'Job_Role'] = 'VP'
+
+
+# randomly replace department names w/ another variation
+for _ in range(5):  # number of replacements
+    idx = df[df['Department'] == 'IT'].sample(1).index
+    df.at[idx[0], 'Department'] = 'Information Technology'
+    
+# randomly replace department names w/ another variation
+for _ in range(4):  # number of replacements
+    idx = df[df['Department'] == 'HR'].sample(1).index
+    df.at[idx[0], 'Department'] = 'People'
+
+
+# Introduce outliers in salary
+for _ in range(5):  # number of outliers
+    idx = random.randint(0, df.shape[0] - 1)  # row
+    df.at[idx, 'Salary'] = random.uniform(300, 500)  # salary outside of normal bounds
+
+###############################################################################
+# Duplicate a record but with a new last name and new email per the new last name
+###############################################################################
+# Select a random record from the DataFrame
+idx = df.sample(1).index[0]
+original_record = df.loc[idx]
+
+# Duplicate the record and generate a new last name
+new_record = original_record.copy()
+
+# Extract the original last name
+original_last_name = original_record['Name'].split()[1]
+
+# Generate a new last name different from the original
+new_last_name = fake.last_name()
+while new_last_name == original_last_name:
+    new_last_name = fake.last_name()
+
+# Update the 'Name' field in the new record with the new last name
+new_record['Name'] = new_record['Name'].split()[0] + " " + new_last_name
+
+# Generate a new email based on the new name
+new_email = new_record['Name'].replace(" ",".") + "@company.org"
+
+# Update the 'Email' field in the new record with the new email
+new_record['Email'] = new_email
+
+# Append the new record to the DataFrame
+df = pd.concat([df, pd.DataFrame(new_record).T])
+
+
+###############################################################################
+# Duplicate a row, but create a new Employee ID for the new row, so all data is
+#   the same except the new Employee ID
+###############################################################################
+# Identify a pair of duplicate rows
+duplicates = df[df.duplicated(keep=False)]
+
+# If any duplicates were found
+if not duplicates.empty:
+    # Choose a pair randomly
+    pair_indices = duplicates.sample(2).index
+    # Choose one of the rows randomly
+    idx_to_update = random.choice(pair_indices)
+    # Generate a new Employee ID
+    new_employee_id = str(uuid.uuid4())
+    # Update the record
+    df.loc[idx_to_update, 'EmployeeID'] = new_employee_id
+
+# Change some hire dates to string
+for _ in range(5):  # number of data type issues
+    idx = random.randint(0, df.shape[0] - 1)  # row
+    df.at[idx, 'Hire Date'] = str(df.at[idx, 'Hire Date'])  
+
+
+###############################################################################
+# Output the data
+###############################################################################
+
+# Randomly sort the DataFrame since the added, duplicated rows are at the bottom
+df = df.sample(frac=1, random_state=42)
+
+# Reset the index of the sorted DataFrame
+df = df.reset_index(drop=True)
+
+# create a new DataFrame with a row clarifying data are fake
+# fake_data_notice = pd.DataFrame([['Fake data for demo purpose.'] * len(df.columns)], columns=df.columns)
+
+# concatenate the fake row with the original df
+# df = pd.concat([fake_data_notice, df], ignore_index=True)
+
+# output df to a csv
+df.to_csv('C:/Users/john.lynagh/Downloads/Fake_demo_data_HR.csv'
+                      , index=False)
